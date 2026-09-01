@@ -32,7 +32,7 @@ There are no automated tests in this repo (`test/` is the default Flutter counte
 Two directions, both JSON `{type, ...}` messages, implemented in `concierge_tab.dart`:
 
 - **App → page** (`_postToPage` → `window.postMessage`): `CHANGE_LOCALE {locale}`, `OPEN_CHIPS {category}`, `OPEN_PROMPT {prompt}`. These are all just posted and logged in this demo — the real app owns session lifecycle (e.g. starting a new concierge session), not this demo.
-- **Page → app** (`MobiBridge.postMessage` → `_onBridgeMessage`): `AUTH_REQUEST` (the page asks for an auth code; the app shows an in-app `AlertDialog` and replies with `AUTH_CODE {code}` once acknowledged) and `OPEN_PAGE {page}` (calls `widget.onOpenPage`, which `RootShell` wires to `_openPage`/`_pageToTabIndex`; pages without a dedicated tab — profile/cards/notifications/language — route to More).
+- **Page → app** (`MobiBridge.postMessage` → `_onBridgeMessage`): `AUTH_REQUEST` (the page asks for an auth code; the app shows an in-app `AlertDialog` and replies with `AUTH_CODE {code}` once acknowledged), `OPEN_PAGE {page}` (calls `widget.onOpenPage`, which `RootShell` wires to `_openPage`/`_pageToTabIndex`; pages without a dedicated tab — profile/cards/notifications/language — route to More), and `OPEN_EXTERNAL_URL {url}` (opens validated HTTP(S) URLs in the system browser).
 
 When changing bridge behavior, update both sides: the Dart handler in `ConciergeTabState` (`concierge_tab.dart`) and the JS in `assets/concierge_demo.html` (which stands in for the real concierge site and should mirror what a real integration would do, so it's useful for manually exercising both message directions).
 
