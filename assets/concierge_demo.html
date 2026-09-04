@@ -83,6 +83,11 @@
     <button onclick="sendAuthRequest()">Send AUTH_REQUEST</button>
   </div>
 
+  <p class="sub" style="margin-top: 12px;">Open an external URL in the system browser:</p>
+  <div class="actions">
+    <button onclick="sendOpenExternalUrl('https://example.com/terms')">Open example.com</button>
+  </div>
+
   <div id="log">waiting…</div>
 
   <script>
@@ -113,6 +118,10 @@
 
     function sendAuthRequest() {
       postToNative({ type: 'AUTH_REQUEST' });
+    }
+
+    function sendOpenExternalUrl(url) {
+      postToNative({ type: 'OPEN_EXTERNAL_URL', url });
     }
 
     // App → page messages, delivered via window.postMessage. AUTH_CODE is
