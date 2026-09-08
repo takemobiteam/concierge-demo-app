@@ -91,18 +91,15 @@ Future<void> dispatchMobiBridgeMessage(
   switch (type) {
     case 'AUTH_REQUEST':
       await onAuthRequest();
-      break;
     case 'OPEN_PAGE':
       final page = data['page'];
       if (page is String) onOpenPage(page);
-      break;
     case 'OPEN_EXTERNAL_URL':
       await openExternalUrl(
         data['url'],
         launcher: externalUrlLauncher,
         logger: log,
       );
-      break;
     default:
       log('[Bridge] unhandled type: $type');
   }
@@ -142,6 +139,10 @@ class ConciergeTabState extends State<ConciergeTab>
   // real app — this demo just posts the message into the page and logs it.
   Future<void> changeLocale(String locale) async {
     await _postToPage({'type': 'CHANGE_LOCALE', 'locale': locale});
+  }
+
+  Future<void> logout() async {
+    await _postToPage({'type': 'LOGOUT'});
   }
 
   Future<void> openChips(String category) async {

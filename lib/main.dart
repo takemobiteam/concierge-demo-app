@@ -84,6 +84,10 @@ class _RootShellState extends State<RootShell> {
     await _conciergeKey.currentState?.changeLocale(locale);
   }
 
+  Future<void> _logout() async {
+    await _conciergeKey.currentState?.logout();
+  }
+
   Future<void> _openChips(String category) async {
     setState(() => _index = _conciergeIndex);
     await _conciergeKey.currentState?.openChips(category);
@@ -107,16 +111,14 @@ class _RootShellState extends State<RootShell> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       const PlaceholderTab(label: 'Home'),
-      BenefitsTab(
-        onOpenChips: _openChips,
-        onOpenPrompt: _openPrompt,
-      ),
+      BenefitsTab(onOpenChips: _openChips, onOpenPrompt: _openPrompt),
       const PlaceholderTab(label: 'Membership'),
       ConciergeTab(key: _conciergeKey, onOpenPage: _openPage),
       MoreTab(
         onClearCookies: _clearCookiesAndReload,
         currentLocale: _locale,
         onChangeLocale: _changeLocale,
+        onLogout: _logout,
       ),
     ];
 
@@ -132,11 +134,7 @@ class _RootShellState extends State<RootShell> {
           children: [
             for (int i = 0; i < pages.length; i++)
               Offstage(offstage: _index != i, child: pages[i]),
-            Positioned(
-              top: 8,
-              right: 16,
-              child: LocaleBadge(locale: _locale),
-            ),
+            Positioned(top: 8, right: 16, child: LocaleBadge(locale: _locale)),
           ],
         ),
       ),

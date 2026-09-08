@@ -9,7 +9,7 @@
       "toolArgs": ["--dart-define-from-file=.env.json"]
     },
     {
-      "name": "Flutter (dev, local concierge demo)",
+      "name": "Flutter (dev, local concierge mock)",
       "type": "dart",
       "request": "launch",
       "program": "lib/main.dart",
