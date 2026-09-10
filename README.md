@@ -41,3 +41,12 @@ backend required.
    concierge demo)") are available in `.vscode/launch.json` if you'd rather
    launch from the debugger.
 
+## Connect to a locally-running [Virtual Concierge](https://github.com/takemobiteam/vercel-ai-demo)
+
+### Android emulator
+
+The android emulator only exposes the localhost of its host machine as 10.0.2.2, thus auth cookies will not save because they are restricted to [secure contexts](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Secure_Contexts). The following adb command allows you to connect directly to localhost:3000 instead of 10.0.2.2:3000.
+
+```
+adb reverse tcp:3000 tcp:3000
+```

@@ -21,12 +21,14 @@ class MoreTab extends StatelessWidget {
   final Future<void> Function() onClearCookies;
   final String currentLocale;
   final ValueChanged<String> onChangeLocale;
+  final Future<void> Function() onLogout;
 
   const MoreTab({
     super.key,
     required this.onClearCookies,
     required this.currentLocale,
     required this.onChangeLocale,
+    required this.onLogout,
   });
 
   Future<void> _clearWebViewData(BuildContext context) async {
@@ -79,6 +81,13 @@ class MoreTab extends StatelessWidget {
             label: 'Clear WebView cookies',
             subtitle: 'Sign out of the concierge session',
             onTap: () => _clearWebViewData(context),
+          ),
+          const SizedBox(height: 10),
+          MoreRow(
+            icon: Icons.logout_outlined,
+            label: 'Log out',
+            subtitle: 'Log out',
+            onTap: onLogout,
           ),
         ],
       ),
