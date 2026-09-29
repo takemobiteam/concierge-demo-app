@@ -4,6 +4,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'benefits_tab.dart';
 import 'concierge_tab.dart';
 import 'more_tab.dart';
+import 'native_auth.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -69,6 +70,7 @@ class _RootShellState extends State<RootShell> {
 
   int _index = 0;
   String _locale = kLanguageOptions.first.code;
+  final NativeAuth _auth = NativeAuth();
   final GlobalKey<ConciergeTabState> _conciergeKey =
       GlobalKey<ConciergeTabState>();
 
@@ -84,8 +86,18 @@ class _RootShellState extends State<RootShell> {
     await _conciergeKey.currentState?.changeLocale(locale);
   }
 
+  // Finish the native sign-out before telling the page, so it can't get a
+  // code in between. While signed out, AUTH_REQUEST goes unanswered.
   Future<void> _logout() async {
+    setState(_auth.signOut);
     await _conciergeKey.currentState?.logout();
+  }
+
+  // The signed-out page won't ask for a code by itself, so reload it: the
+  // fresh load goes to /request-auth and sends AUTH_REQUEST.
+  Future<void> _signIn() async {
+    setState(_auth.signIn);
+    await _conciergeKey.currentState?.reload();
   }
 
   Future<void> _openChips(String category) async {
@@ -113,12 +125,14 @@ class _RootShellState extends State<RootShell> {
       const PlaceholderTab(label: 'Home'),
       BenefitsTab(onOpenChips: _openChips, onOpenPrompt: _openPrompt),
       const PlaceholderTab(label: 'Membership'),
-      ConciergeTab(key: _conciergeKey, onOpenPage: _openPage),
+      ConciergeTab(key: _conciergeKey, auth: _auth, onOpenPage: _openPage),
       MoreTab(
         onClearCookies: _clearCookiesAndReload,
         currentLocale: _locale,
         onChangeLocale: _changeLocale,
+        isSignedIn: _auth.isSignedIn,
         onLogout: _logout,
+        onSignIn: _signIn,
       ),
     ];
 

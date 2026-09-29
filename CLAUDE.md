@@ -11,12 +11,13 @@ A Flutter demo app (`concierge_demo_app`) demonstrating a JS bridge (`MobiBridge
 ```sh
 flutter pub get              # install dependencies
 flutter analyze              # lint/typecheck — run after any change to lib/
+flutter test                 # unit tests (MobiBridge dispatch + auth handling)
 open -a Simulator            # boot the iOS Simulator (flutter run targets it once running)
 flutter run --dart-define-from-file=.env.json        # run against the remote concierge (CONCIERGE_SOURCE=remote)
 flutter run --dart-define-from-file=.env.local.json  # run against the bundled local demo page (CONCIERGE_SOURCE=local)
 ```
 
-There are no automated tests in this repo (`test/` is the default Flutter counter-test stub). Two matching VS Code launch configs exist (`.vscode/launch.json`) — "Flutter (dev)" and "Flutter (dev, local concierge demo)" — for the same two `--dart-define-from-file` variants above.
+`flutter test` runs unit tests in `test/concierge_tab_test.dart`, which cover `dispatchMobiBridgeMessage`, external URL handling, and `AUTH_REQUEST` replies. Two matching VS Code launch configs exist (`.vscode/launch.json`) — "Flutter (dev)" and "Flutter (dev, local concierge demo)" — for the same two `--dart-define-from-file` variants above.
 
 ## Architecture
 
@@ -25,14 +26,17 @@ There are no automated tests in this repo (`test/` is the default Flutter counte
 - **`main.dart`** — app entry + `RootShell`, the app's only screen. Owns a 5-tab bottom nav (Home, Benefits, Membership, Concierge, More) via `Offstage`-based tab switching (not `IndexedStack`/`Navigator`), the app-wide `_locale` state, and a `GlobalKey<ConciergeTabState>` used to call into the Concierge tab from sibling tabs (Benefits, More). `_pageToTabIndex` maps bridge `OPEN_PAGE` names to tab indices and must stay in sync with `_tabs`.
 - **`concierge_tab.dart`** — the actual point of this demo: wraps a `webview_flutter` `WebViewController` loading either the real concierge URL (`kConciergeUrl`, remote) or the bundled demo page (`assets/concierge_demo.html`, local), selected by the `CONCIERGE_SOURCE` dart-define (`local` default, so the app runs with no config; or `remote`). Registers a JS channel named `MobiBridge`; see below.
 - **`benefits_tab.dart`**, **`more_tab.dart`** — the tabs that trigger bridge actions (chips/prompt, locale switching) via callbacks passed down from `RootShell`; `ConciergeTab` never reaches up for these — it takes an `onOpenPage` callback instead of walking the widget tree.
+- **`native_auth.dart`** — `NativeAuth`, the app's simple native signed-in state (owned by `RootShell`, toggled by the More tab's Log out / Sign in), and the `AuthCodeSource` seam that mints codes for `AUTH_CODE`. `DemoAuthCodeSource` sends the `DEMO_AUTH_CODE` dart-define (default `usr-002`), which only a `MOCK_AUTH=true` concierge accepts; a real provider must return a fresh single-use code per call.
 - **`theme.dart`**, **`widgets.dart`** — shared colors/text styles and small reusable widgets (`MoreRow`, `PlaceholderTab`, `LocaleBadge`) used across tabs.
 
 ### The MobiBridge protocol
 
 Two directions, both JSON `{type, ...}` messages, implemented in `concierge_tab.dart`:
 
-- **App → page** (`_postToPage` → `window.postMessage`): `CHANGE_LOCALE {locale}`, `OPEN_CHIPS {category}`, `OPEN_PROMPT {prompt}`. These are all just posted and logged in this demo — the real app owns session lifecycle (e.g. starting a new concierge session), not this demo.
-- **Page → app** (`MobiBridge.postMessage` → `_onBridgeMessage`): `AUTH_REQUEST` (the page asks for an auth code; the app shows an in-app `AlertDialog` and replies with `AUTH_CODE {code}` once acknowledged), `OPEN_PAGE {page}` (calls `widget.onOpenPage`, which `RootShell` wires to `_openPage`/`_pageToTabIndex`; pages without a dedicated tab — profile/cards/notifications/language — route to More), and `OPEN_EXTERNAL_URL {url}` (opens validated HTTP(S) URLs in the system browser).
+- **App → page** (`_postToPage` → `window.postMessage`): `CHANGE_LOCALE {locale}`, `OPEN_CHIPS {category}`, `OPEN_PROMPT {prompt}`, `LOGOUT`, and `AUTH_CODE {code}` (only as a reply to `AUTH_REQUEST`). The first three are just posted and logged in this demo — the real app owns session lifecycle (e.g. starting a new concierge session), not this demo.
+- **Page → app** (`MobiBridge.postMessage` → `_onBridgeMessage`): `AUTH_REQUEST` (the page asks for an auth code; `answerAuthRequest` replies immediately with `AUTH_CODE {code}`, or ignores it while `NativeAuth` is signed out), `OPEN_PAGE {page}` (calls `widget.onOpenPage`, which `RootShell` wires to `_openPage`/`_pageToTabIndex`; pages without a dedicated tab — profile/cards/notifications/language — route to More), and `OPEN_EXTERNAL_URL {url}` (opens validated HTTP(S) URLs in the system browser).
+
+Sign-in follows the contract in vercel-ai-demo's `tests/contracts/bridge/mobi-bridge.md` ("Required Flutter counterpart"), because the web page doesn't guard against duplicate or unsolicited codes: (1) send `AUTH_CODE` only in reply to `AUTH_REQUEST`, each time with a never-sent code; (2) reply within 3 seconds with no user input (no dialogs); (3) sign out natively before posting `LOGOUT`, ignore `AUTH_REQUEST` while signed out, and reload the WebView after signing back in. These are documented on `ConciergeTab` and covered in `test/concierge_tab_test.dart`.
 
 When changing bridge behavior, update both sides: the Dart handler in `ConciergeTabState` (`concierge_tab.dart`) and the JS in `assets/concierge_demo.html` (which stands in for the real concierge site and should mirror what a real integration would do, so it's useful for manually exercising both message directions).
 
@@ -42,4 +46,4 @@ When changing bridge behavior, update both sides: the Dart handler in `Concierge
 
 ### Env / config
 
-Dart-define files (`.env.json`, `.env.local.json`) supply `CONCIERGE_URL` and `CONCIERGE_SOURCE` at build/run time and are gitignored, since values here may be personal (e.g. a dev's own ngrok URL). `.env.json.example` and `.env.local.json.example` are checked in with placeholder values — copy and rename to get started (see README).
+Dart-define files (`.env.json`, `.env.local.json`) supply `CONCIERGE_URL`, `CONCIERGE_SOURCE` and `DEMO_AUTH_CODE` at build/run time and are gitignored, since values here may be personal (e.g. a dev's own ngrok URL). `.env.json.example` and `.env.local.json.example` are checked in with placeholder values — copy and rename to get started (see README).

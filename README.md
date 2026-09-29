@@ -41,6 +41,24 @@ backend required.
    concierge demo)") are available in `.vscode/launch.json` if you'd rather
    launch from the debugger.
 
+## Sign-in over MobiBridge
+
+In auth-code-only concierge deployments, a signed-out page asks the app for a
+code (`AUTH_REQUEST`), and the app replies right away with `AUTH_CODE`. The
+page exchanges that code for session cookies, and shows a "reload the app"
+warning if no code arrives within 3 seconds.
+
+The app sends `DEMO_AUTH_CODE` (default `usr-002`) as the code. That only works
+against a concierge running with `MOCK_AUTH=true`, which accepts a mock user id
+as the code and doesn't make mock codes single-use. A real deployment needs a
+fresh single-use code from the identity provider for every request, which this
+demo can't mint. To plug one in, implement `AuthCodeSource` in
+`lib/native_auth.dart` and pass it to `NativeAuth`.
+
+The More tab's **Log out** signs the app out and then sends `LOGOUT`. While
+signed out, the app ignores `AUTH_REQUEST`. **Sign in** signs back in and
+reloads the concierge, so the page asks for a code again.
+
 ## Connect to a locally-running [Virtual Concierge](https://github.com/takemobiteam/vercel-ai-demo)
 
 ### Android emulator
