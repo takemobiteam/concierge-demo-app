@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
+import 'native_auth.dart';
 import 'theme.dart';
 
 const String kConciergeUrl = String.fromEnvironment(
@@ -65,6 +66,32 @@ Future<void> openExternalUrl(
   }
 }
 
+/// Answers one `AUTH_REQUEST` right away with a fresh `AUTH_CODE`, or stays
+/// quiet while the shell is signed out. Never waits on user input: the page
+/// gives up after 3 seconds.
+@visibleForTesting
+Future<void> answerAuthRequest(
+  NativeAuth auth, {
+  required Future<void> Function(Map<String, dynamic> payload) postToPage,
+  BridgeLogger? logger,
+}) async {
+  final log = logger ?? debugPrint;
+  final String? code;
+  try {
+    code = await auth.codeForAuthRequest();
+  } catch (error) {
+    log('[Bridge] failed to get an auth code: $error');
+    return;
+  }
+  if (code == null) {
+    log('[Bridge] ignored AUTH_REQUEST: signed out');
+    return;
+  }
+  await postToPage({'type': 'AUTH_CODE', 'code': code});
+  // The code is a credential in real deployments, so it isn't logged.
+  log('[Bridge] sent AUTH_CODE');
+}
+
 /// Parses and dispatches one page-to-app MobiBridge message.
 @visibleForTesting
 Future<void> dispatchMobiBridgeMessage(
@@ -109,16 +136,36 @@ Future<void> dispatchMobiBridgeMessage(
 /// `postMessage` channel between this app and the concierge page:
 ///
 ///  - App → page (`_postToPage`, delivered via `window.postMessage`):
-///    CHANGE_LOCALE, OPEN_CHIPS, OPEN_PROMPT.
+///    CHANGE_LOCALE, OPEN_CHIPS, OPEN_PROMPT, LOGOUT, AUTH_CODE.
 ///  - Page → app (`MobiBridge.postMessage`, handled by `_onBridgeMessage`):
 ///    AUTH_REQUEST, OPEN_PAGE, OPEN_EXTERNAL_URL.
+///
+/// Sign-in: a signed-out concierge page loads `/request-auth`, which sends
+/// AUTH_REQUEST and waits 3 seconds for AUTH_CODE before showing a "reload
+/// the app" warning; it then exchanges the code for session cookies. The page
+/// doesn't guard against duplicate or unsolicited codes, so the shell keeps
+/// three promises:
+///
+///  1. Reply only when asked, with a fresh code. AUTH_CODE goes out only in
+///     reply to AUTH_REQUEST — never on launch, resume or any other event —
+///     and each reply carries a code never sent before. Codes are single-use,
+///     so a resent code fails the exchange. (The demo code source repeats one
+///     mock user id, which only a MOCK_AUTH deployment accepts; see
+///     `native_auth.dart`.)
+///  2. Reply within 3 seconds, without waiting on user input. A later reply
+///     still signs the user in while the page is open.
+///  3. Stay quiet while signed out, then reload. LOGOUT goes out only after
+///     the native sign-out finishes, AUTH_REQUEST is ignored until a native
+///     user signs in, and signing in reloads the WebView so the page asks for
+///     a code again.
 ///
 /// See `assets/concierge_demo.html` for a stand-in implementation of the
 /// page side of this protocol.
 class ConciergeTab extends StatefulWidget {
+  final NativeAuth auth;
   final ValueChanged<String> onOpenPage;
 
-  const ConciergeTab({super.key, required this.onOpenPage});
+  const ConciergeTab({super.key, required this.auth, required this.onOpenPage});
 
   @override
   State<ConciergeTab> createState() => ConciergeTabState();
@@ -141,6 +188,8 @@ class ConciergeTabState extends State<ConciergeTab>
     await _postToPage({'type': 'CHANGE_LOCALE', 'locale': locale});
   }
 
+  // Call only after the native sign-out has finished (promise 3), so the page
+  // can't request a code again and get one.
   Future<void> logout() async {
     await _postToPage({'type': 'LOGOUT'});
   }
@@ -211,33 +260,9 @@ class ConciergeTabState extends State<ConciergeTab>
     );
   }
 
-  // The page requests an auth code; show it as an in-app alert, then post
-  // AUTH_CODE back once the user acknowledges.
+  // Answer immediately with no dialog: the page stops waiting after 3s.
   Future<void> _handleAuthRequest() async {
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: kCardColor,
-        title: const Text(
-          'Auth code requested',
-          style: TextStyle(color: Colors.white, fontFamily: 'Georgia'),
-        ),
-        content: const Text(
-          'The concierge page requested an auth code.',
-          style: TextStyle(color: kMutedText, fontFamily: 'Helvetica'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text(
-              'Send code',
-              style: TextStyle(color: kAccentColor),
-            ),
-          ),
-        ],
-      ),
-    );
-    await _postToPage({'type': 'AUTH_CODE', 'code': '12345'});
+    await answerAuthRequest(widget.auth, postToPage: _postToPage);
   }
 
   @override
