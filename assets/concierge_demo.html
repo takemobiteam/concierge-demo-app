@@ -70,6 +70,20 @@
       min-height: 48px;
     }
 
+    #auth-status {
+      margin-top: 12px;
+      background: #111114;
+      border: 1px solid #24242a;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 14px;
+    }
+
+    #auth-status.warn {
+      border-color: rgba(232, 181, 154, 0.7);
+      color: #e8b59a;
+    }
+
     #log {
       margin-top: 20px;
       background: #111114;
@@ -90,6 +104,8 @@
   <h1>Concierge Bridge Demo<span id="locale-badge">en-US</span></h1>
   <p class="sub">Local page standing in for the remote concierge site.</p>
 
+  <div id="auth-status">Signed out</div>
+
   <p class="sub" style="margin-top: 12px;">Simulate a page → app message (OPEN_PAGE):</p>
   <div class="actions">
     <button onclick="sendOpenPage('home')">home</button>
@@ -98,9 +114,9 @@
     <button onclick="sendOpenPage('profile')">more</button>
   </div>
 
-  <p class="sub" style="margin-top: 12px;">Request an auth code from the app:</p>
+  <p class="sub" style="margin-top: 12px;">Request an auth code from the app again (sent automatically on load):</p>
   <div class="actions">
-    <button onclick="sendAuthRequest()">Send AUTH_REQUEST</button>
+    <button onclick="requestAuth()">Send AUTH_REQUEST</button>
   </div>
 
   <p class="sub" style="margin-top: 12px;">Open an external URL in the system browser:</p>
@@ -136,26 +152,77 @@
       postToNative({ type: 'OPEN_PAGE', page });
     }
 
-    function sendAuthRequest() {
-      postToNative({ type: 'AUTH_REQUEST' });
-    }
-
     function sendOpenExternalUrl(url) {
       postToNative({ type: 'OPEN_EXTERNAL_URL', url });
     }
 
-    // App → page messages, delivered via window.postMessage. AUTH_CODE is
-    // the app's reply to our AUTH_REQUEST; the rest are just logged.
+    // Sign-in, mirroring the real concierge's /request-auth page: every load
+    // starts signed out (this stand-in keeps its session in memory only) and
+    // asks the app for a code. With no AUTH_CODE after 3 seconds it shows the
+    // "reload the app" warning and never retries by itself; a late code still
+    // signs in. LOGOUT signs out without asking for a new code — the app
+    // reloads this page once a native user signs in again.
+    const AUTH_REQUEST_TIMEOUT_MS = 3000;
+    const statusEl = document.getElementById('auth-status');
+    let awaitingCode = false;
+    let authTimer = null;
+    const usedCodes = new Set();
+
+    function setStatus(text, warn) {
+      statusEl.textContent = text;
+      statusEl.classList.toggle('warn', !!warn);
+    }
+
+    function requestAuth() {
+      awaitingCode = true;
+      clearTimeout(authTimer);
+      authTimer = setTimeout(() => {
+        log('!! no AUTH_CODE within ' + AUTH_REQUEST_TIMEOUT_MS / 1000 + 's');
+        setStatus('Couldn\'t sign you in. Please reload the app.', true);
+      }, AUTH_REQUEST_TIMEOUT_MS);
+      setStatus('Requesting an auth code…');
+      postToNative({ type: 'AUTH_REQUEST' });
+    }
+
+    function receiveAuthCode(code) {
+      clearTimeout(authTimer);
+      // The real page doesn't guard against these; flag them here so the
+      // app's promises are easy to check by hand.
+      if (!awaitingCode) log('!! AUTH_CODE arrived without an AUTH_REQUEST');
+      if (usedCodes.has(code)) {
+        log('!! code was already used; a real single-use exchange would fail ' +
+          '(fine for MOCK_AUTH user ids)');
+      }
+      awaitingCode = false;
+      usedCodes.add(code);
+      // Stands in for POST /api/auth/code-exchange.
+      setStatus('Signed in with code ' + code);
+    }
+
+    function logout() {
+      clearTimeout(authTimer);
+      awaitingCode = false;
+      setStatus('Signed out. Please reload the app.', true);
+    }
+
+    // App → page messages, delivered via window.postMessage. AUTH_CODE and
+    // LOGOUT drive sign-in above, CHANGE_LOCALE updates the badge, and the
+    // rest are just logged.
     window.addEventListener('message', (event) => {
       const data = event.data;
       if (!data || typeof data !== 'object') return;
       log('<- received: ' + JSON.stringify(data));
       if (data.type === 'CHANGE_LOCALE' && data.locale) {
         document.getElementById('locale-badge').textContent = data.locale;
+      } else if (data.type === 'AUTH_CODE' && typeof data.code === 'string') {
+        receiveAuthCode(data.code);
+      } else if (data.type === 'LOGOUT') {
+        logout();
       }
     });
 
-    log('loaded — waiting for CHANGE_LOCALE / OPEN_CHIPS / OPEN_PROMPT / AUTH_CODE');
+    log('loaded — waiting for CHANGE_LOCALE / OPEN_CHIPS / OPEN_PROMPT / AUTH_CODE / LOGOUT');
+    requestAuth();
   </script>
 </body>
 
