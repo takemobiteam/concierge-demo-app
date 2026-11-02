@@ -23,6 +23,10 @@ const String kConciergeSource = String.fromEnvironment(
 );
 const String kLocalConciergeAsset = 'assets/concierge_demo.html';
 
+// The dev backend accepts this code repeatedly. A real app fetches a fresh
+// single-use code from its identity backend for every AUTH_REQUEST.
+const String kDemoAuthCode = '12345';
+
 typedef ExternalUrlLauncher =
     Future<bool> Function(Uri url, {required LaunchMode mode});
 typedef BridgeLogger = void Function(String message);
@@ -109,7 +113,7 @@ Future<void> dispatchMobiBridgeMessage(
 /// `postMessage` channel between this app and the concierge page:
 ///
 ///  - App → page (`_postToPage`, delivered via `window.postMessage`):
-///    CHANGE_LOCALE, OPEN_CHIPS, OPEN_PROMPT.
+///    AUTH_CODE, CHANGE_LOCALE, LOGOUT, OPEN_CHIPS, OPEN_PROMPT.
 ///  - Page → app (`MobiBridge.postMessage`, handled by `_onBridgeMessage`):
 ///    AUTH_REQUEST, OPEN_PAGE, OPEN_EXTERNAL_URL.
 ///
@@ -211,33 +215,9 @@ class ConciergeTabState extends State<ConciergeTab>
     );
   }
 
-  // The page requests an auth code; show it as an in-app alert, then post
-  // AUTH_CODE back once the user acknowledges.
+  // The concierge gives up after 10 s, so reply straight away, with no UI.
   Future<void> _handleAuthRequest() async {
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: kCardColor,
-        title: const Text(
-          'Auth code requested',
-          style: TextStyle(color: Colors.white, fontFamily: 'Georgia'),
-        ),
-        content: const Text(
-          'The concierge page requested an auth code.',
-          style: TextStyle(color: kMutedText, fontFamily: 'Helvetica'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text(
-              'Send code',
-              style: TextStyle(color: kAccentColor),
-            ),
-          ),
-        ],
-      ),
-    );
-    await _postToPage({'type': 'AUTH_CODE', 'code': '12345'});
+    await _postToPage({'type': 'AUTH_CODE', 'code': kDemoAuthCode});
   }
 
   @override
